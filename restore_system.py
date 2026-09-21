@@ -21,6 +21,8 @@ def restore(backup,keyfile,folder):
         with tempfile.TemporaryDirectory(dir=folder) as temp:
             db=Path(temp)/'database.sqlite3';db.write_bytes(payload)
             with sqlite3.connect(db) as conn:
+                # Restore as a single file: no pending WAL may be left behind on rename.
+                conn.execute('PRAGMA journal_mode=DELETE')
                 if conn.execute('PRAGMA integrity_check').fetchone()[0]!='ok':raise ValueError('Damaged backup.')
                 if conn.execute('PRAGMA user_version').fetchone()[0]!=1:raise ValueError('Unsupported schema version.')
                 for (sid,token) in conn.execute('SELECT service_id,encrypted_payload FROM vault_data'):
@@ -29,6 +31,11 @@ def restore(backup,keyfile,folder):
                 conn.execute('DELETE FROM fsm')
                 conn.execute("UPDATE delivery_jobs SET status='blocked' WHERE status='pending'")
                 conn.execute('UPDATE broadcasts SET done=1')
+                tables={r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                if 'broadcast_targets' in tables:
+                    conn.execute("UPDATE broadcast_targets SET status='failed',lease_token=NULL WHERE status IN ('queued','leased')")
+                if 'web_sessions' in tables:
+                    conn.execute('DELETE FROM web_sessions')
                 conn.commit()
             (folder/'master.key').write_text(keys)
             os.replace(db,folder/'research.sqlite3')

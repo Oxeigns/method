@@ -7,3 +7,10 @@ data/
 *.sqlite*
 *.vault
 *.key
+node_modules/
+frontend/.next/
+frontend/out/
+frontend/tsconfig.tsbuildinfo
+*.session*
+playwright-report/
+test-results/

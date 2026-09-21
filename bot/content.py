@@ -76,11 +76,11 @@ async def action(q:CallbackQuery,state:FSMContext,store,cipher):
             await q.message.answer('Send replacement text / UTF-8 .txt file. Editing returns the entry to draft.' if verb=='edit' else 'Send the new title (1–80 characters).',reply_markup=CANCEL)
         elif verb=='publish':
             # Never infer correctness from publishing; operator chooses when ready.
-            await store.pool.execute('UPDATE vault_data SET is_published=1 WHERE data_id=$1',did)
+            await store.pool.execute('UPDATE vault_data SET revision=revision+1,is_published=1 WHERE data_id=$1',did)
             await store.audit(q.from_user.id,'publish',did)
             await q.message.answer('🟢 Published. Paid users can receive this entry when the service is active.',reply_markup=ADMIN)
         elif verb=='unpublish':
-            await store.pool.execute('UPDATE vault_data SET is_published=0 WHERE data_id=$1',did)
+            await store.pool.execute('UPDATE vault_data SET revision=revision+1,is_published=0 WHERE data_id=$1',did)
             await store.audit(q.from_user.id,'unpublish',did)
             await q.message.answer('📝 Returned to draft.',reply_markup=ADMIN)
         elif verb=='delete':
@@ -152,7 +152,7 @@ async def edit(m:Message,state:FSMContext,store,cipher,bot):
     text=await read_text(m,bot);did=(await state.get_data())['did']
     r=await store.pool.fetchrow('SELECT * FROM vault_data WHERE data_id=$1',did)
     if not r:raise ValueError('Entry no longer exists.')
-    await store.pool.execute('UPDATE vault_data SET encrypted_payload=$2,is_published=0 WHERE data_id=$1',did,cipher.encrypt(r['service_id'],text))
+    await store.pool.execute('UPDATE vault_data SET revision=revision+1,encrypted_payload=$2,is_published=0 WHERE data_id=$1',did,cipher.encrypt(r['service_id'],text))
     await remove_input(m);await store.audit(m.from_user.id,'edit_draft',did);await state.clear()
     await m.answer('✅ Updated and returned to draft. Review and publish when ready.',reply_markup=keyboard([('Review entry',f'content:entry:{did}')]))
 
@@ -160,7 +160,7 @@ async def edit(m:Message,state:FSMContext,store,cipher,bot):
 async def rename(m:Message,state:FSMContext,store):
     if not 1<=len(m.text)<=80:raise ValueError('Title must have 1–80 characters.')
     did=(await state.get_data())['did']
-    await store.pool.execute('UPDATE vault_data SET title=$2 WHERE data_id=$1',did,m.text)
+    await store.pool.execute('UPDATE vault_data SET revision=revision+1,title=$2 WHERE data_id=$1',did,m.text)
     await store.audit(m.from_user.id,'rename_entry',did);await state.clear()
     await m.answer('Title updated.',reply_markup=ADMIN)
 

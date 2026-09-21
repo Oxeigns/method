@@ -1,0 +1,26 @@
+{
+  "name": "Method Research Workspace",
+  "description": "Encrypted research bot and Next.js/Flask owner dashboard, backed by PostgreSQL.",
+  "repository": "https://github.com/Oxeigns/method",
+  "stack": "heroku-24",
+  "buildpacks": [{"url":"heroku/nodejs"},{"url":"heroku/python"}],
+  "env": {
+    "APP_ENV":{"value":"production"},
+    "BOT_TOKEN":{"description":"New bot token from BotFather","required":true},
+    "ADMIN_ID":{"description":"Owner numeric Telegram ID","required":true},
+    "API_ID":{"description":"Telegram application API ID from my.telegram.org","required":true},
+    "API_HASH":{"description":"Telegram application API hash","required":true},
+    "TELETHON_ENABLED":{"value":"true"},
+    "DATABASE_URL":{"description":"Supabase PostgreSQL session-pooler URL; TLS certificate must validate","required":true},
+    "MIGRATION_DATABASE_URL":{"description":"Optional migration-owner URL if runtime role cannot apply schema","required":false},
+    "MASTER_ENCRYPTION_KEYS":{"description":"Fernet key generated with python -m bot.crypto --generate-key; retain securely","required":true},
+    "SECRET_KEY":{"generator":"secret"},
+    "DASHBOARD_PASSWORD_HASH":{"description":"Generate with python scripts/generate_secrets.py --password-hash","required":true},
+    "PUBLIC_ORIGIN":{"description":"Your exact https://APP-NAME.herokuapp.com origin","required":true},
+    "TRUST_PROXY":{"value":"true"},
+    "DB_POOL_MAX":{"value":"5"},
+    "BROADCAST_RATE":{"value":"8"},
+    "PAYMENT_MODE":{"value":"stars"}
+  },
+  "formation":{"web":{"quantity":1,"size":"basic"},"worker":{"quantity":1,"size":"basic"}}
+}

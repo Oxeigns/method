@@ -27,6 +27,7 @@ def row(record):
     return result
 
 class SQLite:
+    dialect="sqlite"
     def __init__(self,conn,path):
         self.conn,self.path=conn,Path(path)
         self.lock=asyncio.Lock()
@@ -43,6 +44,20 @@ class SQLite:
         await c.execute('PRAGMA busy_timeout=5000')
         await c.create_function('now',0,time.time)
         await c.executescript(Path(__file__).parents[1].joinpath('schema.sql').read_text())
+        await c.execute('BEGIN IMMEDIATE')
+        try:
+            for table in ('services','vault_data'):
+                async with c.execute(f'PRAGMA table_info({table})') as cur:
+                    columns=[r['name'] for r in await cur.fetchall()]
+                if 'revision' not in columns:
+                    await c.execute(f'ALTER TABLE {table} ADD COLUMN revision INTEGER NOT NULL DEFAULT 1')
+            async with c.execute('PRAGMA table_info(broadcasts)') as cur:
+                broadcast_columns=[r['name'] for r in await cur.fetchall()]
+            if 'prepared' not in broadcast_columns:
+                await c.execute('ALTER TABLE broadcasts ADD COLUMN prepared INTEGER NOT NULL DEFAULT 0')
+            await c.commit()
+        except BaseException:
+            await c.rollback();await c.close();raise
         return cls(c,path)
 
     @asynccontextmanager

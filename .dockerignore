@@ -6,3 +6,7 @@ __pycache__
 data
 *.zip
 *.vault
+node_modules
+frontend/.next
+frontend/out
+*.session*

@@ -1,188 +1,123 @@
-# Method — encrypted Telegram research bot
+# Method · private research workspace
 
-**DB URL nahi chahiye. Redis bhi nahi chahiye.** Set your Telegram bot token and owner ID, then start the bot. It creates its database and encryption key automatically.
+A paid Telegram research bot with a responsive **Next.js + React + Tailwind dashboard**, **Flask REST API**, native **Telethon** owner commands and broadcast delivery, **aiohttp** transport, and **Supabase/PostgreSQL** production storage. Local SQLite mode remains available without a DB URL.
 
-All data stays in a local SQLite database under `DATA_DIR`. Docker Compose uses a persistent named volume. Prices, research drafts, published content, users, purchases, admin settings, queues and unfinished input flows survive normal restarts and container rebuilds.
+This is a deployable implementation, not a guarantee of flawless operation or a 60-second deployment. Real Telegram credentials, a database, hosting configuration and live payment acceptance tests are still required. No host or Supabase project is created automatically.
 
-> Persistent does not mean indestructible: deleting the volume, losing the host disk, or using an ephemeral hosting filesystem can lose data. Download content backups and keep an independent copy of the full database backup **and its original master.key**. No paid hosting or cloud database has been provisioned by this repository.
+## Choose your setup
 
-## Start in 3 steps
+| Mode | Required services | Run |
+|---|---|---|
+| Local bot only / Termux | Python, bot token, owner ID | `python main.py` |
+| Local full stack | Python + Node to build UI, token/owner ID, dashboard secrets | Flask web + bot worker; shared persistent SQLite directory |
+| Production / Heroku | Supabase PostgreSQL, Telegram API ID/hash and bot token, web secrets | Separate `web` and `worker` process types |
+
+Production refuses SQLite on ephemeral Heroku storage. A SQLite volume survives normal restarts, not disk loss/deletion. Backups and original encryption keys must be kept separately and outside the host.
+
+## Local bot: no database URL
 
 ```bash
 git clone https://github.com/Oxeigns/method.git
 cd method
+python -m venv .venv
+. .venv/bin/activate
+pip install -r requirements-local.txt
 cp .env.example .env
 ```
 
-Edit `.env` locally:
+Set `BOT_TOKEN` and numeric `ADMIN_ID` in `.env`. Leave `DATABASE_URL` empty and `TELETHON_ENABLED=false`, then run `python main.py`. The database and key are generated once in `DATA_DIR`.
 
-```dotenv
-BOT_TOKEN=your_new_botfather_token
-ADMIN_ID=your_numeric_telegram_user_id
-```
+For native Telethon features, set `TELETHON_ENABLED=true`, `API_ID` and `API_HASH` from your own Telegram application at https://my.telegram.org. These application credentials are different from the bot token. Owner-only `/dashboard` and `/systemstatus` use Telethon. Paid checkout/receipt ingestion and existing content-management flows remain on aiogram's aiohttp-backed Bot API transport; they have not been discarded during the architecture rebuild.
 
-Then:
+For Termux, read and run `bash scripts/termux.sh`. Android may suspend background processes; it is not a guarantee of 24/7 hosting. The optional web dashboard can be built on a desktop and copied over if a Next.js build is unavailable on Android.
 
-```bash
-docker compose up --build -d
-```
+## Full local dashboard
 
-Open your bot, press Start, then send `/adminpanel`. The owner must press Start before the bot can send verification notifications. Never put your token, password, backup, real research or `data/` in GitHub.
-
-Without Docker, use Linux and Python 3.12:
+1. Complete local setup and install `requirements.txt`.
+2. Run `python scripts/generate_secrets.py` to generate a web `SECRET_KEY` and a Fernet key. **Existing SQLite deployments: keep your existing data/master.key. Do not replace it with a new key.** The generated Fernet key is for new PostgreSQL deployments; existing local installs may leave `MASTER_ENCRYPTION_KEYS` empty.
+3. Run `python scripts/generate_secrets.py --password-hash`; set its output as `DASHBOARD_PASSWORD_HASH`. Use a new dashboard password, not your Telegram password.
+4. Set `PUBLIC_ORIGIN=http://localhost:8000` and your generated `SECRET_KEY`.
+5. Build and start:
 
 ```bash
-python -m venv .venv
-. .venv/bin/activate
-pip install -r requirements.txt
-python main.py
+npm ci
+npm run build
+python -m gunicorn wsgi:app --bind 127.0.0.1:8000 --workers 1 --threads 4
 ```
 
-Keep this process running under a supervisor. The default storage path is `./data`; use an absolute `DATA_DIR` path for a supervised service. Run **one bot replica** against a local disk, not an NFS/share. The process uses an OS file lock to refuse another instance sharing the same storage path.
+Run `python main.py` in another terminal using the same `.env` and `DATA_DIR`. Open http://localhost:8000. Flask serves the static Next.js export and `/api` on the same origin; no Node server or cross-origin browser credentials are required after building. `npm run dev` is a frontend development server only; use the Flask-served build for integrated login testing.
 
-## Manage everything from your bot
+Alternatively, `docker compose up --build -d` runs both processes with a shared named volume. Complete the dashboard environment settings first. The dashboard binds to localhost by default. Do not use `docker compose down -v` unless you intend to erase data.
 
-| Need | Owner action |
-|---|---|
-| Add a service/method | `/adminpanel` → Service Settings → `new Your service name` |
-| Add reference data | Manage Content → service → Add → title → text or UTF-8 `.txt` file |
-| Edit existing content | Manage Content → entry → Edit text |
-| Preview safely | Entry → Preview (protected message; deletion queued for one hour) |
-| Publish to buyers | Entry → Publish; service must also be active |
-| Remove from sale | Entry → Unpublish, or set service `is_active false` |
-| Delete content | Entry → Delete → Confirm delete |
-| Change title | Entry → Rename |
-| Change INR reference price | Service Settings → `1 price 1500` |
-| Change live Stars price | Service Settings → `1 stars_price 100` |
-| Change access duration | Service Settings → `1 validity_days 30` (`0` = lifetime while service operates) |
-| Change content deletion time | Service Settings → `1 delete_after_seconds 86400` (60–86400 seconds) |
-| Rename service | Service Settings → `1 service_name New name` |
-| Change description | Service Settings → `1 description Your description` |
-| Activate/archive service | Service Settings → `1 is_active true` / `1 is_active false` |
-| Set support | Payment / Support → `support_username @YourUsername` |
-| Change purchase terms | Payment / Support → `terms Your purchase and refund terms` |
-| Ban/unban, revoke, extend | User Management shows the required input format |
-| Analytics / payment review | Analytics / Verification Queue |
-| Announcement | Broadcast → preview → confirm |
-| Refund Stars | Stars Refund → transaction UUID |
-| Download private content | `/backup` or Content Backup |
-| Restore private content | `/restore` or Restore / Import |
-| Import your own JSON data | `/import` or Restore / Import → Import reference JSON |
+## Supabase / PostgreSQL
 
-Use the actual service number shown by the bot instead of `1`. After changing one setting, reopen Service Settings to change another. `/cancel` ends any input flow.
+- Use a direct connection or **session pooler**, not transaction pooling: the bot holds a session advisory lock. Use your Supabase project's provider-issued PostgreSQL URL.
+- Set a stable `MASTER_ENCRYPTION_KEYS` Fernet key shared by every process. PostgreSQL mode will not generate an ephemeral key. Preserve old keys during rotation.
+- Apply `migrations/001_postgres.sql` using the migration owner. It creates a private `method` schema, parameterized-query tables, indexes, RLS and seeds.
+- For least privilege, create the `method_app` login yourself, run `migrations/provision_role.sql`, and use that role in `DATABASE_URL`. Do not expose `method` in the Supabase Data API or grant access to `anon`/`authenticated`.
+- `MIGRATION_DATABASE_URL` may hold an owner connection for the release migration when the runtime role cannot apply DDL. Prefer externally managed migrations if you do not want owner credentials in the app environment.
+- Production uses certificate-verifying TLS. Install the provider CA when needed; do not disable certificate checks.
+- Every web process has an asyncpg pool, default maximum five connections; the bot has another pool and reserves one connection for its lock. The default two web workers plus bot can use up to 15 database connections. Adjust `DB_POOL_MAX` and web-worker count to your database limit.
+- Statement caching is disabled for pooler compatibility. Parameters are bound; request values never become SQL identifiers. Schema/field identifiers are fixed allowlists.
 
-Editing text returns an entry to **draft**, so unfinished edits are not accidentally delivered to buyers. Imports also create drafts. Draft content cannot be purchased or delivered. Publishing is the owner's editorial decision; it does not establish that an allegation, email address, policy or legal statement is verified. The bot does not send reports to Telegram, institutes or third parties.
+## Heroku
 
-Service archival is intentional: transaction and purchase history must not be destroyed by deleting a sold service. Draft entries can be permanently deleted individually. Previously delivered messages are not recalled by editing, unpublishing or deleting an entry; their existing deletion schedule continues.
+[Deploy to Heroku](https://heroku.com/deploy?template=https://github.com/Oxeigns/method)
 
-## Your supplied reference drafts
+`app.json` provides Node then Python buildpacks, explicit configuration requirements, and separate web/worker formations. `Procfile` runs migrations at release, Flask under Gunicorn, and the async bot as a worker. The Next.js static export is built by `heroku-postbuild`.
 
-The repository contains **no real supplied complaint text, evidence links, private research, passwords or verified contact claims**. `docs/content-import.example.json` contains placeholder data only. Your private `.vault` reference file, if supplied separately, can be uploaded through `/restore` with its separate password. It imports as new disabled reference services and unpublished entries; review it before publishing.
+Required production settings: `BOT_TOKEN`, `ADMIN_ID`, `API_ID`, `API_HASH`, `DATABASE_URL`, `MASTER_ENCRYPTION_KEYS`, `SECRET_KEY`, `DASHBOARD_PASSWORD_HASH`, `PUBLIC_ORIGIN`, `APP_ENV=production`, `TELETHON_ENABLED=true`. Supabase is not provisioned by this button, and paid dynos/database plans may be needed. Review costs before provisioning.
 
-This separates your supplied data from publicly readable source code. No hardcoded “methods” or promises of bans/unbans are shipped.
+Set `PUBLIC_ORIGIN` to the exact HTTPS app origin. `TRUST_PROXY=true` is for Heroku's trusted reverse proxy; do not enable it on a directly exposed untrusted server. Keep one Telegram polling worker. Horizontal web scaling is supported; do not independently multiply broadcast workers without a shared rate budget.
 
-## Services and payment choices
+`.python-version` selects Python 3.12; `runtime.txt` is retained for the requested legacy blueprint. Heroku now recommends `.python-version` and deprecates `runtime.txt`:
+https://devcenter.heroku.com/articles/python-runtimes
 
-Default INR reference prices are preserved:
+For continuous deployment, enable your Heroku app's GitHub integration and select **wait for CI to pass before deploy**. No GitHub deployment credential is embedded. GitHub Actions tests both backends and builds/tests the dashboard; it does not provision or deploy a paid app without your Heroku configuration.
 
-| ID | Service | INR reference price |
-|---|---|---:|
-| 1 | Specific Reporting Method | ₹1,500 |
-| 2 | Account Limit Removal Guide | ₹300 |
-| 3 | Channel Unban Procedure/Format | ₹1,500 |
-| 4 | Group Ban Procedure/Format | ₹2,000 |
-| 5 | Local Laws & Compliance Frameworks | ₹15,000 |
+## Owner workflows
 
-**Stars is the default live checkout.** Telegram requires Stars for digital goods sold in Telegram apps. Set each `stars_price` yourself; no INR-to-Stars conversion is assumed. Empty/draft-only services and services without a Stars price cannot be purchased.
+The dashboard includes analytics, paginated catalog/pricing, reference creation/editing, publication controls, users/bans, transactions and confirmed broadcasts. Existing bot `/adminpanel` retains support/payment settings, content backup/restore, access extensions/revocation, payment verification and refunds. Content edits made in the bot increment revisions so a stale browser editor cannot overwrite them silently.
 
-Source: https://core.telegram.org/bots/payments-stars
+- New/edited entries are encrypted drafts. Publishing does not verify the truth of supplied claims, contacts or legal assertions.
+- Enter real research privately through the bot or dashboard. Nothing from your previously supplied complaint/appeal drafts is committed to the public source repository.
+- `/backup` exports password-encrypted content; `/restore` imports it into new disabled services with draft entries. Prior `.vault` files still work.
+- Existing SQLite data is preserved with additive schema changes. PostgreSQL is a separate deployment target, **not an automatic migration of your SQLite users/payments**. Content can move via `/backup` and `/restore`; migrate/reconcile live billing records before changing backends.
+- Local encrypted system snapshots remain available. PostgreSQL deployments need provider backups/PITR plus your separately retained encryption key.
+- The original ZIP is a legacy upload. Run current root source files, not the old ZIP.
 
-The requested UPI screenshot implementation remains optional and disabled:
+## Payments and content protection
 
-```dotenv
-PAYMENT_MODE=upi
-ACKNOWLEDGE_UPI_PLATFORM_RESTRICTION=true
-```
+Stars remains the default for digital goods, per https://core.telegram.org/bots/payments-stars. INR prices remain owner-editable references. Stars prices must be configured separately. One-time purchases support finite or lifetime access; automatic recurring billing is not implemented.
 
-This acknowledgement is **not an exemption** from Telegram's rules. Keep Stars for this digital-research deployment. If reviewing that optional implementation, set `upi_id yourname@bank` from Payment / Support. Screenshots enter the owner's queue, and actual bank settlement must be verified before approving. Screenshots alone do not prove payment; no bank/UTR API is integrated.
+The optional UPI screenshot path remains disabled behind an explicit configuration acknowledgement. It is not an exemption from Telegram's digital-goods rules. Bank settlement must be verified manually; screenshots alone are not proof.
 
-Purchases are one-time grants with configurable validity, not automatically recurring subscriptions. Renewals extend finite access. Stars payment receipts are persisted before Telegram's update offset advances; charge IDs deduplicate replays. Approval, entitlement and delivery queue updates commit in a single SQLite transaction.
+Fernet encrypts research at rest with service binding. Messages use protected delivery and durable deletion jobs. Telegram bot chats are not end-to-end encrypted; web/API previews necessarily reveal plaintext to the authenticated owner. Content protection cannot stop external cameras or all copying. Do not enable request-body/debug logging, core dumps or insecure backups.
 
-## Backups and restore
-
-### Content backup from the bot — portable across hosts
-
-1. Send `/backup`.
-2. Choose a backup password with 16–256 characters. Keep it separately in a password manager.
-3. The bot returns a password-encrypted `research-content.vault` document. **Download it somewhere independent of this server.**
-4. To import it into this or another installation, use `/restore`, upload the file and provide its password. Review the counts, then confirm.
-
-A content backup includes service names, descriptions, prices, durations and all draft/published entry text. It excludes users, purchases, credentials and the master key. Restore is **additive**: it creates disabled services with draft entries and never overwrites existing content, entitlements or payments. Exact duplicate imports are rejected. Review, set/confirm prices, publish entries, then activate each new service.
-
-Passwords are used in memory and are not saved in FSM/database logs. Incoming password/content messages are deleted where Telegram permits. Telegram bot chats are not end-to-end encrypted; do not use chat-based entry if your threat model excludes Telegram itself. Export encryption uses a random salt, scrypt and authenticated Fernet encryption.
-
-### Full system snapshots — local automatic recovery
-
-The bot takes an encrypted snapshot at startup if no recent copy exists, then approximately daily, keeping the newest seven in `data/backups/system-*.backup`. SQLite's online backup API includes committed WAL data; copying only the live `.sqlite3` file is not a safe substitute.
-
-These full backups contain users, payments, research ciphertext and settings. They are encrypted with `data/master.key`. **They cannot be restored without that original key.** Keep backups and key in separate secure external storage. Daily copies on the same disk protect against some corruption/operator mistakes; they do not protect against loss of that disk.
-
-For disaster recovery, stop the bot and restore into a new directory:
-
-```bash
-python restore_system.py \
-  --backup /safe/system-YYYYMMDD.backup \
-  --key-file /safe/original-master.key \
-  --data-dir /srv/method-recovered
-```
-
-Set `DATA_DIR=/srv/method-recovered` and restart only after reconciling payments newer than the snapshot. The restore tool validates database integrity and vault decryption. It refuses to overwrite an existing database/key. Old input states are cleared, pending deliveries are blocked and old broadcasts are marked complete to avoid unsolicited replays; buyers can request content again. Restore does not recreate transactions that occurred after the snapshot.
-
-For Docker, copy backups/key securely from the named volume or perform restore in a maintenance container while the bot is stopped. Never run `docker compose down -v` unless you intentionally want to delete all stored data. Normal `docker compose down` keeps the volume.
-
-## Security boundaries
-
-- SQLite stores each research body as authenticated Fernet ciphertext bound to its service ID. Prices, titles and transaction metadata are not individually encrypted. Full backup files are encrypted as a whole.
-- The master key is generated once in `data/master.key` with restrictive permissions. If a database exists but its key is missing, startup refuses to invent a replacement. Preserve the entire data volume.
-- Owner authorization covers `/adminpanel`, `/backup`, `/restore`, `/import`, every admin/content callback, and every owner FSM reply. Group chats are refused.
-- Research previews and paid deliveries explicitly use `protect_content=True`. Encrypted downloadable backups deliberately use `False`, because the file is protected by its password and must be savable.
-- Content is decrypted only for a checked entitlement or an authenticated owner's preview/export. Python cannot guarantee secure memory erasure. Disable debug request logging and core dumps on the host.
-- Telegram content protection is not absolute anti-piracy. External cameras, transcription and some capture techniques cannot be prevented.
-- Deletion jobs survive restarts, but Telegram/API outages and deletion time limits can prevent deletion. Monitor overdue jobs. A crash between Telegram accepting a send and the database recording its message ID can still produce a duplicate or untracked message; no cross-system transaction exists.
-- Backup/restore supports up to 100 services, 1,000 entries and 2 MB of content per export/import. A single entry supports 100 KB through `.txt`. Manage larger collections in smaller groups or extend limits after memory/load testing.
-- Protect the host: a stolen database plus its master key exposes the vault. Restrict disk/backups, protect the owner account with two-step verification and never share bot credentials.
-
-## Operations
-
-- One polling instance; no webhook URL, DB URL or Redis server required.
-- `data/research.sqlite3` stores durable FSM, users, entitlements and jobs. SQLite runs in WAL mode with `synchronous=FULL`, foreign keys, and serialized `BEGIN IMMEDIATE` write transactions.
-- Review `payment_receipts.status='reconcile'` for unmatched money; it never automatically grants access.
-- Failed refunds remain `Refunding` and can be retried. Refund revokes all access to that service for the payer; restore other valid grants manually when needed. Off-bot refunds/chargebacks require reconciliation.
-- Failed content sends retry with backoff. Blocked users/jobs stay inspectable. Rejected payment notifications may fail if the buyer blocked the bot; their profile still shows status.
-- Content and manual UPI input states expire after an hour; order payment deadlines are 30 minutes. Restarting does not clear these states immediately.
-- Keep polling downtime short; Telegram does not retain pending updates indefinitely.
-- The initial uploaded `encrypted_research_bot.zip` is retained as a legacy archive. **Run the root source files in this repository**, which now use SQLite; the archive contains the older PostgreSQL version.
-- There is no automatic migration from a previously deployed PostgreSQL database. Export/validate that deployment before adopting a fresh SQLite install.
-
-## Tests
+## Verification
 
 ```bash
 pip install -r requirements-dev.txt
 python -m pytest -q
+npm ci
+npm run build
+npm run typecheck
 ```
 
-The suite runs real temporary SQLite databases; no database service or secret is required. It verifies restart persistence, transactions/concurrent approvals, expiry/revocation, receipt replay, draft exclusion, editing/publishing/deletion, backup encryption/tampering/import, full snapshots/recovery, owner guards, FSM persistence and protected delivery. GitHub Actions runs it on pushes and pull requests.
+Real PostgreSQL conformance test (use a disposable database only):
 
-Live Telegram payments and Docker/host deployment require your real credentials/environment and were not exercised by the offline suite. The repository is configured and tested locally; it is not a running hosted bot until you deploy it.
+```bash
+TEST_DATABASE_URL=postgresql://test:test@localhost/method_test python -m pytest -q
+```
 
-## Project map
+Browser integration after building:
 
-- `main.py`: lifecycle, owner guard, process lock and workers.
-- `bot/sqlite.py`, `schema.sql`, `bot/storage.py`: local database, atomic transactions and persistent FSM.
-- `bot/content.py`, `bot/backup.py`, `bot/system_backup.py`: content editor and encrypted backups.
-- `bot/admin.py`, `bot/user.py`: admin/user purchase workflows.
-- `bot/crypto.py`, `bot/db.py`, `bot/polling.py`, `bot/workers.py`: encryption, grants, receipt persistence, durable delivery/deletion.
-- `restore_system.py`: offline full-system restore.
-- `.env.example`, `Dockerfile`, `compose.yaml`: startup configuration.
+```bash
+pip install playwright==1.58.0
+python -m playwright install chromium
+python scripts/browser_smoke.py
+```
 
-Technical references: https://www.sqlite.org/backup.html and https://docs.aiogram.dev/en/latest/dispatcher/finite_state_machine/storages.html
+CI provisions a disposable PostgreSQL service, runs the Python tests, builds/type-checks Next.js, and exercises browser login, service creation, encrypted draft save, publication, mobile width and logout. Tests use synthetic data. Live Telegram/Supabase/Heroku checks still require actual credentials and infrastructure.
+
+See [architecture and contracts](docs/ARCHITECTURE.md) for the five-goal design, JSON menus, REST endpoints, concurrency algorithm and operational limits.

@@ -122,7 +122,7 @@ async def service(m: Message,state: FSMContext,store):
             if not 1<=len(value)<=(80 if field=='service_name' else 500):
                 raise ValueError('Text length')
         # field is strictly allowlisted, all values use SQL parameters.
-        result=await store.pool.execute(f'UPDATE services SET {field}=$2 WHERE service_id=$1',sid,value)
+        result=await store.pool.execute(f'UPDATE services SET revision=revision+1,{field}=$2 WHERE service_id=$1',sid,value)
         if result=='UPDATE 0':
             raise ValueError('No such service')
     await store.audit(m.from_user.id,'service_update',sid)
@@ -148,15 +148,15 @@ async def users(m: Message,state: FSMContext,store,config):
             if not await c.fetchval('SELECT EXISTS(SELECT 1 FROM services WHERE service_id=$1)',sid):
                 raise ValueError('Unknown service')
             if cmd=='revoke':
-                await c.execute('UPDATE entitlements SET revoked=true WHERE user_id=$1 AND service_id=$2',uid,sid)
+                await c.execute('UPDATE entitlements SET revoked=1 WHERE user_id=$1 AND service_id=$2',uid,sid)
             else:
                 days=int(parts[3])
                 if not 0<=days<=3650:
                     raise ValueError('Days out of range')
                 await c.execute('''INSERT INTO entitlements(user_id,service_id,expires_at) VALUES($1,$2,CASE WHEN $3=0 THEN NULL ELSE now()+86400*$3 END)
-                ON CONFLICT(user_id,service_id) DO UPDATE SET revoked=false,expires_at=CASE
-                WHEN $3=0 OR (entitlements.expires_at IS NULL AND NOT entitlements.revoked) THEN NULL
-                ELSE max(now(),CASE WHEN entitlements.revoked THEN now() ELSE entitlements.expires_at END)+86400*$3 END''',uid,sid,days)
+                ON CONFLICT(user_id,service_id) DO UPDATE SET revoked=0,expires_at=CASE
+                WHEN $3=0 OR (entitlements.expires_at IS NULL AND entitlements.revoked=0) THEN NULL
+                ELSE max(now(),CASE WHEN entitlements.revoked=1 THEN now() ELSE entitlements.expires_at END)+86400*$3 END''',uid,sid,days)
     await store.audit(m.from_user.id,cmd,' '.join(parts[1:]))
     await state.clear()
     await m.answer('✅ User access updated.',reply_markup=ADMIN)
@@ -190,7 +190,7 @@ async def refund(m: Message,state: FSMContext,store,bot):
             raise ValueError('Not a refundable Stars payment')
         await c.execute("UPDATE transactions SET status='Refunding' WHERE txn_id=$1",tid)
         # Immediately suspend access, including existing queued deliveries.
-        await c.execute('UPDATE entitlements SET revoked=true WHERE user_id=$1 AND service_id=$2',t['user_id'],t['service_id'])
+        await c.execute('UPDATE entitlements SET revoked=1 WHERE user_id=$1 AND service_id=$2',t['user_id'],t['service_id'])
     from aiogram.exceptions import TelegramBadRequest
     try:
         await bot.refund_star_payment(t['user_id'],t['telegram_charge_id'])
