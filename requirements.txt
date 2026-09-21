@@ -1,0 +1,4 @@
+aiogram==3.31.0
+aiosqlite==0.22.1
+cryptography==46.0.5
+python-dotenv==1.1.1

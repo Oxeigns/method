@@ -1,0 +1,16 @@
+{
+  "format": "research-content-v1",
+  "services": [
+    {
+      "service_name": "My reference collection",
+      "description": "Private source data awaiting owner review.",
+      "price": 1500,
+      "stars_price": null,
+      "validity_days": 0,
+      "delete_after_seconds": 86400,
+      "entries": [
+        {"title": "Example reference", "text": "Replace this placeholder with your own data. It imports as a draft."}
+      ]
+    }
+  ]
+}
