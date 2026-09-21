@@ -1,5 +1,6 @@
 """Central fail-fast settings shared by bot, Flask, migrations and workers."""
 import os
+import fcntl
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
@@ -55,13 +56,15 @@ class Config:
         if not raw_keys:
             if database:raise ValueError('PostgreSQL requires MASTER_ENCRYPTION_KEYS, shared by web and worker.')
             keyfile=folder/'master.key'
-            if not keyfile.exists():
-                if (folder/'research.sqlite3').exists():raise ValueError('Restore missing original master.key; refusing to replace it.')
-                try:
+            # Web and bot can start together; serialize first-key creation and reads.
+            with open(folder/'key-init.lock','a') as lock:
+                fcntl.flock(lock,fcntl.LOCK_EX)
+                if not keyfile.exists():
+                    if (folder/'research.sqlite3').exists():raise ValueError('Restore missing original master.key; refusing to replace it.')
                     fd=os.open(keyfile,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
-                    with os.fdopen(fd,'w') as f:f.write(Fernet.generate_key().decode())
-                except FileExistsError:pass
-            raw_keys=keyfile.read_text().strip()
+                    with os.fdopen(fd,'w') as f:
+                        f.write(Fernet.generate_key().decode());f.flush();os.fsync(f.fileno())
+                raw_keys=keyfile.read_text().strip()
         keys=tuple(k.strip() for k in raw_keys.split(','))
         for k in keys:Fernet(k.encode())
         enabled=boolean('TELETHON_ENABLED',production)
@@ -77,6 +80,6 @@ class Config:
         secret=os.getenv('SECRET_KEY','');password=os.getenv('DASHBOARD_PASSWORD_HASH','')
         if component=='web':
             if len(secret)<32:raise ValueError('Web requires SECRET_KEY of at least 32 characters.')
-            if not password.startswith(('scrypt:','pbkdf2:')):raise ValueError('Set DASHBOARD_PASSWORD_HASH with scripts/secrets.py.')
+            if not password.startswith(('scrypt:','pbkdf2:')):raise ValueError('Set DASHBOARD_PASSWORD_HASH with scripts/generate_secrets.py.')
         return cls(token,admin,folder,keys,mode,os.getenv('SUPPORT_USERNAME',''),database,production,api_id,api_hash,enabled,
                    origin,secret,password,integer('DB_POOL_MAX',5,2,30),integer('BROADCAST_RATE',8,1,20),boolean('TRUST_PROXY'))

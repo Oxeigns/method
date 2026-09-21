@@ -156,7 +156,7 @@ async def users(m: Message,state: FSMContext,store,config):
                 await c.execute('''INSERT INTO entitlements(user_id,service_id,expires_at) VALUES($1,$2,CASE WHEN $3=0 THEN NULL ELSE now()+86400*$3 END)
                 ON CONFLICT(user_id,service_id) DO UPDATE SET revoked=0,expires_at=CASE
                 WHEN $3=0 OR (entitlements.expires_at IS NULL AND entitlements.revoked=0) THEN NULL
-                ELSE max(now(),CASE WHEN entitlements.revoked THEN now() ELSE entitlements.expires_at END)+86400*$3 END''',uid,sid,days)
+                ELSE max(now(),CASE WHEN entitlements.revoked=1 THEN now() ELSE entitlements.expires_at END)+86400*$3 END''',uid,sid,days)
     await store.audit(m.from_user.id,cmd,' '.join(parts[1:]))
     await state.clear()
     await m.answer('✅ User access updated.',reply_markup=ADMIN)

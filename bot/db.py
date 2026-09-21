@@ -60,7 +60,7 @@ class Store:
         VALUES($1,$2,CASE WHEN $3=0 THEN NULL ELSE now()+86400*$3 END)
         ON CONFLICT(user_id,service_id) DO UPDATE SET revoked=0, expires_at=
         CASE WHEN $3=0 OR (entitlements.expires_at IS NULL AND entitlements.revoked=0) THEN NULL
-        ELSE max(now(),CASE WHEN entitlements.revoked THEN now() ELSE entitlements.expires_at END)+86400*$3 END''',t['user_id'],t['service_id'],t['validity_days'])
+        ELSE max(now(),CASE WHEN entitlements.revoked=1 THEN now() ELSE entitlements.expires_at END)+86400*$3 END''',t['user_id'],t['service_id'],t['validity_days'])
         await c.execute('INSERT INTO delivery_jobs(user_id,service_id,txn_id) VALUES($1,$2,$3) ON CONFLICT(txn_id) DO NOTHING',t['user_id'],t['service_id'],t['txn_id'])
 
     async def review(self, tid, approve, admin_id):

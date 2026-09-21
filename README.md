@@ -34,8 +34,8 @@ For Termux, read and run `bash scripts/termux.sh`. Android may suspend backgroun
 ## Full local dashboard
 
 1. Complete local setup and install `requirements.txt`.
-2. Run `python scripts/secrets.py` to generate a web `SECRET_KEY` and a Fernet key. **Existing SQLite deployments: keep your existing data/master.key. Do not replace it with a new key.** The generated Fernet key is for new PostgreSQL deployments; existing local installs may leave `MASTER_ENCRYPTION_KEYS` empty.
-3. Run `python scripts/secrets.py --password-hash`; set its output as `DASHBOARD_PASSWORD_HASH`. Use a new dashboard password, not your Telegram password.
+2. Run `python scripts/generate_secrets.py` to generate a web `SECRET_KEY` and a Fernet key. **Existing SQLite deployments: keep your existing data/master.key. Do not replace it with a new key.** The generated Fernet key is for new PostgreSQL deployments; existing local installs may leave `MASTER_ENCRYPTION_KEYS` empty.
+3. Run `python scripts/generate_secrets.py --password-hash`; set its output as `DASHBOARD_PASSWORD_HASH`. Use a new dashboard password, not your Telegram password.
 4. Set `PUBLIC_ORIGIN=http://localhost:8000` and your generated `SECRET_KEY`.
 5. Build and start:
 

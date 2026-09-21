@@ -1,5 +1,5 @@
 """Run after npm run build. Uses synthetic data, a local Flask server and Chromium."""
-import sys,tempfile,threading
+import os,sys,tempfile,threading
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).parents[1]))
 from cryptography.fernet import Fernet
@@ -18,7 +18,7 @@ with tempfile.TemporaryDirectory() as directory:
     threading.Thread(target=server.serve_forever,daemon=True).start()
     try:
         with sync_playwright() as p:
-            browser=p.chromium.launch()
+            browser=p.chromium.launch(executable_path=os.getenv("CHROMIUM_EXECUTABLE") or None, args=["--no-sandbox"])
             page=browser.new_page(viewport={'width':1440,'height':1000})
             errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
             page.goto(cfg.origin)
