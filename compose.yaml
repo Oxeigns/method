@@ -4,8 +4,20 @@ services:
     env_file: .env
     environment:
       DATA_DIR: /app/data
-    volumes:
-      - research_data:/app/data
+    volumes: [research_data:/app/data]
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+  web:
+    build: .
+    command: [gunicorn, 'wsgi:app', --bind, '0.0.0.0:8000', --workers, '1', --threads, '4']
+    env_file: .env
+    environment:
+      DATA_DIR: /app/data
+    ports: ['127.0.0.1:8000:8000']
+    volumes: [research_data:/app/data]
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp]

@@ -76,3 +76,13 @@ INSERT OR IGNORE INTO admin_settings VALUES
  ('terms','Personal access to owner-provided research. No guaranteed enforcement or appeal outcome. No redistribution. Contact support for billing or access issues. Access duration is shown before purchase.');
 PRAGMA user_version=1;
 CREATE TABLE IF NOT EXISTS content_imports (digest TEXT PRIMARY KEY, imported_at REAL NOT NULL DEFAULT (unixepoch()));
+CREATE TABLE IF NOT EXISTS login_limits (bucket TEXT PRIMARY KEY, attempts INTEGER NOT NULL, reset_at REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS web_sessions (session_id TEXT PRIMARY KEY, expires_at REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS broadcast_targets (
+ target_id INTEGER PRIMARY KEY AUTOINCREMENT,broadcast_id INTEGER NOT NULL REFERENCES broadcasts,
+ user_id INTEGER NOT NULL REFERENCES users,status TEXT NOT NULL DEFAULT 'queued',
+ available_at REAL NOT NULL DEFAULT (unixepoch()),lease_until REAL,lease_token TEXT,
+ attempts INTEGER NOT NULL DEFAULT 0,last_error TEXT,
+ UNIQUE(broadcast_id,user_id)
+);
+CREATE INDEX IF NOT EXISTS target_due ON broadcast_targets(status,available_at);

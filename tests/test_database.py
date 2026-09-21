@@ -160,6 +160,9 @@ async def test_system_snapshot_and_offline_restore(db,tmp_path):
     # Use a known key for both the vault and full backup in this independent fixture.
     key=Fernet.generate_key().decode();cipher=VaultCipher([key])
     await store.pool.execute('UPDATE vault_data SET encrypted_payload=$1',cipher.encrypt(1,'RECOVERABLE'))
+    bid=await store.pool.fetchval('INSERT INTO broadcasts(encrypted_text) VALUES($1) RETURNING broadcast_id',cipher.encrypt(0,'old announcement'))
+    await store.pool.execute('INSERT INTO broadcast_targets(broadcast_id,user_id) VALUES($1,42)',bid)
+    await store.pool.execute("INSERT INTO web_sessions VALUES('old-session',9999999999)")
     source=await snapshot(store,cipher,tmp_path/'backups')
     assert b'RECOVERABLE' not in source.read_bytes()
     keyfile=tmp_path/'saved.key';keyfile.write_text(key)
@@ -168,6 +171,8 @@ async def test_system_snapshot_and_offline_restore(db,tmp_path):
     pool=await SQLite.open(target/'research.sqlite3')
     token=await pool.fetchval('SELECT encrypted_payload FROM vault_data WHERE service_id=1')
     assert cipher.decrypt(1,token)=='RECOVERABLE'
+    assert await pool.fetchval('SELECT status FROM broadcast_targets')=='failed'
+    assert await pool.fetchval('SELECT count(*) FROM web_sessions')==0
     await pool.close()
     with pytest.raises(ValueError):restore(source,keyfile,target)
 

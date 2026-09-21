@@ -89,33 +89,12 @@ async def deletion_loop(bot,store):
 async def notify_loop(bot,store,config):
     while True:
         try:
-            rows=await store.pool.fetch("SELECT * FROM transactions WHERE status='Pending' AND screenshot_file_id IS NOT NULL AND NOT admin_notified ORDER BY timestamp LIMIT 10")
+            rows=await store.pool.fetch("SELECT * FROM transactions WHERE status='Pending' AND screenshot_file_id IS NOT NULL AND admin_notified=0 ORDER BY timestamp LIMIT 10")
             for t in rows:
                 await send_verification(bot,config.admin_id,t)
-                await store.pool.execute('UPDATE transactions SET admin_notified=true WHERE txn_id=$1',t['txn_id'])
+                await store.pool.execute('UPDATE transactions SET admin_notified=1 WHERE txn_id=$1',t['txn_id'])
         except Exception as exc:
             log.warning('Admin notification failed type=%s',type(exc).__name__)
-        await asyncio.sleep(2)
-
-async def broadcast_loop(bot,store,cipher):
-    while True:
-        try:
-            b=await store.pool.fetchrow('SELECT * FROM broadcasts WHERE NOT done ORDER BY broadcast_id LIMIT 1')
-            if b:
-                users=await store.pool.fetch('SELECT user_id FROM users WHERE NOT is_banned AND user_id>$1 ORDER BY user_id LIMIT 100',b['cursor_user_id'])
-                for u in users:
-                    try:
-                        await bot.send_message(u['user_id'],'<b>📢 Research update</b>\n'+escape(cipher.decrypt(0,b['encrypted_text'])),protect_content=True)
-                    except TelegramForbiddenError:
-                        pass
-                    await store.pool.execute('UPDATE broadcasts SET cursor_user_id=$2 WHERE broadcast_id=$1',b['broadcast_id'],u['user_id'])
-                    await asyncio.sleep(0.1)
-                if not users:
-                    await store.pool.execute('UPDATE broadcasts SET done=true WHERE broadcast_id=$1',b['broadcast_id'])
-        except TelegramRetryAfter as exc:
-            await asyncio.sleep(exc.retry_after)
-        except Exception as exc:
-            log.warning('Broadcast failed type=%s',type(exc).__name__)
         await asyncio.sleep(2)
 
 async def receipt_loop(bot,store,config):

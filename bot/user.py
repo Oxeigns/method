@@ -42,25 +42,28 @@ async def support_button(q: CallbackQuery,store,config):
 async def terms(m: Message,store):
     await m.answer('<b>Purchase terms</b>\n'+escape(await store.setting('terms')))
 
-@router.callback_query(F.data=='catalog')
+@router.callback_query((F.data=='catalog')|F.data.startswith('catalog:'))
 async def catalog(q: CallbackQuery,state: FSMContext,store,config):
-    await state.clear()
-    await store.cancel(q.from_user.id)
-    rows = await store.pool.fetch('SELECT * FROM services WHERE is_active ORDER BY service_id')
-    buttons = []
-    for s in rows:
-        price = f"{s['stars_price']} ⭐" if config.payment_mode=='stars' and s['stars_price'] else f"₹{s['price']:,.0f} reference"
-        if config.payment_mode=='upi':
-            price = f"₹{s['price']:,.0f}"
-        buttons.append([(f"{s['service_name']} — {price}",f"service:{s['service_id']}")])
+    from backend.menus import catalog as page_data
+    await state.clear();await store.cancel(q.from_user.id)
+    page=int(q.data.split(':')[1]) if ':' in q.data else 0
+    data=await page_data(store,page)
+    buttons=[]
+    for item in data['items']:
+        amount=item['price']['XTR'] if config.payment_mode=='stars' else item['price']['INR']
+        label=str(amount)+' ⭐' if config.payment_mode=='stars' else '₹'+str(amount)
+        buttons.append([(item['label']+' — '+label,item['action'])])
+    nav=[]
+    if page>0:nav.append(('⬅️ Previous',f'catalog:{page-1}'))
+    if data['has_next']:nav.append(('Next ➡️',f'catalog:{page+1}'))
+    if nav:buttons.append(nav)
     await q.answer()
-    for start in range(0,len(buttons),30):
-        await q.message.answer('<b>🛒 Research services</b>',reply_markup=keyboard(*buttons[start:start+30]))
+    await q.message.answer(f"<b>🛒 Research services • Page {page+1}</b>",reply_markup=keyboard(*buttons))
 
 @router.callback_query(F.data.startswith('service:'))
 async def service(q: CallbackQuery,store,config):
     sid = int(q.data.split(':')[1])
-    s = await store.pool.fetchrow('SELECT * FROM services WHERE service_id=$1 AND is_active',sid)
+    s = await store.pool.fetchrow('SELECT * FROM services WHERE service_id=$1 AND is_active=1',sid)
     if not s:
         return await q.answer('Service unavailable.',show_alert=True)
     duration = f"{s['validity_days']} days" if s['validity_days'] else 'Lifetime access while this service operates'
