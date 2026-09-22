@@ -35,7 +35,8 @@
       "value": "true"
     },
     "DATABASE_URL": {
-      "value": "postgresql://postgres.ktgtkadiyhmedsjpejfu:Darknetyt1%40gmail.com@aws-0-ap-northeast-2.pooler.supabase.com:5432/postgres?sslmode=require"
+      "description": "Optional at deploy: leave blank to connect from the Telegram owner setup panel.",
+      "required": false
     },
     "MIGRATION_DATABASE_URL": {
       "description": "Optional migration-owner URL if runtime role cannot apply schema",
@@ -76,3 +77,5 @@
     }
   }
 }
+
+
