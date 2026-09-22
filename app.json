@@ -35,8 +35,8 @@
       "value": "true"
     },
     "DATABASE_URL": {
-      "description": "Supabase PostgreSQL session-pooler URL; TLS certificate must validate",
-      "required": true
+      "description": "Optional at deploy: leave blank to connect from the Telegram owner setup panel.",
+      "required": false
     },
     "MIGRATION_DATABASE_URL": {
       "description": "Optional migration-owner URL if runtime role cannot apply schema",

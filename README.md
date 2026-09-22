@@ -128,3 +128,12 @@ python scripts/browser_smoke.py
 CI provisions a disposable PostgreSQL service, runs the Python tests, builds/type-checks Next.js, and exercises browser login, service creation, encrypted draft save, publication, mobile width and logout. Tests use synthetic data. Live Telegram/Supabase/Heroku checks still require actual credentials and infrastructure.
 
 See [architecture and contracts](docs/ARCHITECTURE.md) for the five-goal design, JSON menus, REST endpoints, concurrency algorithm and operational limits.
+
+
+### Deploy first, connect storage later (Heroku)
+Leave DATABASE_URL and MIGRATION_DATABASE_URL empty when deploying. The release skips database initialization, the web process displays setup status, and the worker accepts /adminpanel from ADMIN_ID in a private chat. Purchases and research access remain disabled. No temporary customer database is created.
+
+In the owner setup panel choose Connect database in Heroku. Select the app, open Settings → Reveal Config Vars, and save DATABASE_URL there. Heroku restarts both processes with durable configuration. No database credentials or Heroku API authorizations are collected by the bot. Keep the original encryption seed/keys. The owner panel opens Heroku rather than storing credentials in Telegram.
+
+
+Existing apps: clear stale DATABASE_URL and MIGRATION_DATABASE_URL only to enter setup mode; this does not delete the old database. Reconnect the original database to retain existing purchases and methods. Config updates do not run release commands, so the worker also applies idempotent migrations on startup. Run exactly one worker during setup.

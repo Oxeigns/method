@@ -5,6 +5,9 @@ from config import Config
 from backend.database import open_database
 
 async def main():
+    from backend.setup import pending
+    if pending():
+        return
     cfg=Config.load('migration')
     if cfg.database_url:
         import asyncpg,ssl

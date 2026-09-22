@@ -24,6 +24,15 @@ from bot.polling import poll
 from bot.system_backup import snapshot_loop
 
 async def main():
+    from backend.setup import pending, run
+    if pending():
+        await run()
+        return
+    # Config-var updates restart dynos without running the release command.
+    import os
+    if os.getenv("DYNO") and os.getenv("DATABASE_URL"):
+        from backend.migrate import main as migrate
+        await migrate()
     cfg=Config.load()
     cipher=VaultCipher(cfg.keys)
     logging.info('startup stage=database_connect')
