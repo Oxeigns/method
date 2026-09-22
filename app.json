@@ -36,7 +36,7 @@
     },
     "DATABASE_URL": {
       "description": "Optional at deploy: leave blank to connect from the Telegram owner setup panel.",
-      "required": false
+      "required": true
     },
     "MIGRATION_DATABASE_URL": {
       "description": "Optional migration-owner URL if runtime role cannot apply schema",
