@@ -55,11 +55,15 @@
       "value": "8"
     },
     "PAYMENT_MODE": {
-      "value": "stars"
+      "value": "upi"
     },
     "MASTER_KEY_SEED": {
       "generator": "secret",
       "description": "Auto-generated vault seed. Keep unchanged and back it up."
+    },
+    "ACKNOWLEDGE_UPI_PLATFORM_RESTRICTION": {
+      "value": "true",
+      "description": "UPI is owner-verified. Telegram requires Stars for digital goods; UPI is not compliant for in-app research sales."
     }
   },
   "formation": {

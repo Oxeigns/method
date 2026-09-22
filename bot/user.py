@@ -71,7 +71,7 @@ async def service(q: CallbackQuery,store,config):
     if config.payment_mode=='stars' and not s['stars_price']:
         price = 'Stars price not configured; checkout unavailable'
     ver = await store.setting('terms_version')
-    text = f"<b>{escape(s['service_name'])}</b>\n{escape(s['description'])}\n\nPrice: {price}\nAccess: {duration}\n\n<b>Terms</b>\n{escape(await store.setting('terms'))}"
+    text = f"<b>{escape(s['service_name'])}</b>\n{escape(s['description'])}\n\nPrice: {price}\nAccess: {duration}\nMessage auto-delete: {s['delete_after_seconds']//60} minutes after delivery\n\n<b>Terms</b>\n{escape(await store.setting('terms'))}"
     await q.answer()
     await q.message.answer(text,reply_markup=keyboard([('✅ Agree & Buy',f'buy:{sid}:{ver}')],[('🔓 Open purchased research',f'open:{sid}')]))
 
@@ -91,7 +91,7 @@ async def buy(q: CallbackQuery,state: FSMContext,store,config,bot):
     else:
         await state.set_state(Checkout.waiting_for_screenshot)
         await state.update_data(txn_id=str(tid))
-        await q.message.answer(f'Pay <b>₹{amount:,.2f}</b> to <code>{escape(upi)}</code> (tap to copy).\nSend the payment screenshot as a photo here within 30 minutes.\nOrder: <code>{tid}</code>',reply_markup=CANCEL)
+        await q.message.answer(f'Pay <b>₹{amount:,.2f}</b> to <code>{escape(upi)}</code> (tap to copy).\nSend the payment screenshot as a photo here within 30 minutes.\nOwner approval is required; access starts after approval.\nOrder: <code>{tid}</code>',reply_markup=CANCEL)
 
 @router.message(Checkout.waiting_for_screenshot,F.photo)
 async def screenshot(m: Message,state: FSMContext,store):
@@ -128,7 +128,11 @@ async def profile(q: CallbackQuery,store):
     lines = [f'<b>👤 Profile (first 20 services; full access via catalog)</b>\nID: <code>{q.from_user.id}</code>']
     for e in entries:
         expiry = e['expires_at'].strftime('%Y-%m-%d %H:%M UTC') if e['expires_at'] else 'Lifetime'
-        lines.append(f"{escape(e['service_name'])}: {'Revoked' if e['revoked'] else expiry}")
+        from datetime import datetime,timezone
+        remaining=(e['expires_at']-datetime.now(timezone.utc)).total_seconds() if e['expires_at'] else None
+        status='Revoked' if e['revoked'] else ('Expired' if remaining is not None and remaining<=0 else 'Active')
+        timer=f' • {int(remaining)//86400}d {(int(remaining)%86400)//3600}h left' if remaining is not None and remaining>0 and not e['revoked'] else ''
+        lines.append(f"{escape(e['service_name'])}: {status} • {expiry}{timer}")
     lines.append('\n<b>Recent transactions</b>')
     lines.extend(f"<code>{t['txn_id']}</code>\n{t['status']} • {t['amount']} {t['currency']}" for t in txns)
     await q.answer()

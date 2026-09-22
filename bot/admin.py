@@ -37,9 +37,9 @@ async def action(q: CallbackQuery,state: FSMContext,store,cipher,bot,config):
     elif action=='services':
         rows = await store.pool.fetch('SELECT * FROM services ORDER BY service_id')
         for start in range(0,len(rows),15):
-            await q.message.answer('\n'.join(f"{s['service_id']}: {escape(s['service_name'])} | ₹{s['price']} | Stars {s['stars_price']} | days {s['validity_days']} | active {s['is_active']}" for s in rows[start:start+15]))
+            await q.message.answer('\n'.join(f"{s['service_id']}: {escape(s['service_name'])} | ₹{s['price']} | Stars {s['stars_price']} | days {s['validity_days']} | auto-delete {s['delete_after_seconds']}s | active {s['is_active']}" for s in rows[start:start+15]))
         await state.set_state(Owner.service)
-        await q.message.answer('Send: <code>service_id field value</code>\nFields: price, stars_price, validity_days, delete_after_seconds, is_active, description, service_name\nAdd a separately priced reporting method: <code>new Name of method</code> (₹1500; configure Stars and upload research next).',reply_markup=CANCEL)
+        await q.message.answer('Send: <code>service_id field value</code>\nFields: price, stars_price, validity_days, delete_after_seconds, is_active, description, service_name\nValidity: <code>1 validity_days 30</code> (0 = lifetime). Auto-delete: <code>1 delete_after_seconds 86400</code> (24 hours). Existing purchases keep their validity.\nAdd a separately priced reporting method: <code>new Name of method</code> (₹1500; configure Stars and upload research next).',reply_markup=CANCEL)
     elif action=='vault':
         from .content import show_services
         await show_services(q.message,store)

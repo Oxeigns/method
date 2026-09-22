@@ -218,3 +218,36 @@ async def test_content_owner_publish_delete_handlers(db):
     assert await store.pool.fetchval('SELECT is_published FROM vault_data WHERE data_id=$1',did)
     q.data=f'content:delete_confirm:{did}';await action(q,state,store,cipher)
     assert not await store.pool.fetchrow('SELECT * FROM vault_data WHERE data_id=$1',did)
+
+@pytest.mark.asyncio
+async def test_upi_approval_starts_validity_and_delivery_timer(db):
+    from unittest.mock import AsyncMock
+    from bot.workers import deliver_one
+    store,cipher=db
+    await store.pool.execute('UPDATE services SET validity_days=30,delete_after_seconds=3600 WHERE service_id=1')
+    tid,_,_=await store.order(42,1,'INR','1')
+    assert await store.screenshot(42,tid,'evidence')
+    assert not await store.allowed(42,1)
+    # Approval may follow the screenshot deadline; evidence remains reviewable.
+    await store.pool.execute('UPDATE transactions SET expires_at=now()-60 WHERE txn_id=$1',tid)
+    before=datetime.now(timezone.utc)
+    await store.review(tid,True,99)
+    expiry=await store.pool.fetchval('SELECT expires_at FROM entitlements WHERE user_id=42 AND service_id=1')
+    assert before+timedelta(days=30,seconds=-1)<=expiry<=datetime.now(timezone.utc)+timedelta(days=30,seconds=1)
+    job=await store.pool.fetchrow('SELECT * FROM delivery_jobs WHERE txn_id=$1',tid)
+    sender=SimpleNamespace(send_message=AsyncMock(return_value=SimpleNamespace(message_id=567)))
+    await deliver_one(sender,store,cipher,job)
+    assert sender.send_message.call_args.kwargs['protect_content'] is True
+    due=await store.pool.fetchval('SELECT due_at FROM deletion_jobs WHERE message_id=567')
+    assert 3590<(due-datetime.now(timezone.utc)).total_seconds()<=3601
+    await store.pool.execute('UPDATE entitlements SET expires_at=now()-1 WHERE user_id=42 AND service_id=1')
+    assert not await store.allowed(42,1)
+    with pytest.raises(ValueError):await store.request_delivery(42,1)
+
+@pytest.mark.asyncio
+async def test_rejected_upi_never_grants_access(db):
+    store,_=db
+    tid,_,_=await store.order(42,1,'INR','1');await store.screenshot(42,tid,'evidence')
+    await store.review(tid,False,99)
+    assert not await store.allowed(42,1)
+    assert await store.pool.fetchval('SELECT count(*) FROM delivery_jobs WHERE txn_id=$1',tid)==0

@@ -93,9 +93,11 @@ The dashboard includes analytics, paginated catalog/pricing, reference creation/
 
 ## Payments and content protection
 
-Stars remains the default for digital goods, per https://core.telegram.org/bots/payments-stars. INR prices remain owner-editable references. Stars prices must be configured separately. One-time purchases support finite or lifetime access; automatic recurring billing is not implemented.
+The deployment template and example environment select owner-verified UPI as requested. Telegram requires Stars for digital goods sold inside Telegram apps: https://core.telegram.org/bots/payments-stars. UPI does not meet that requirement for research sales. Set PAYMENT_MODE=stars to use the compliant in-app payment mode. One-time purchases support finite or lifetime access; recurring billing is not implemented.
 
-The optional UPI screenshot path remains disabled behind an explicit configuration acknowledgement. It is not an exemption from Telegram's digital-goods rules. Bank settlement must be verified manually; screenshots alone are not proof.
+For an existing Heroku app, set PAYMENT_MODE=upi and ACKNOWLEDGE_UPI_PLATFORM_RESTRICTION=true in Config Vars; updating app.json does not change existing configuration. Bank settlement must be verified manually; screenshots alone are not proof.
+
+UPI owner setup: `/adminpanel` → Payment / Support → `upi_id yourname@bank`. Verification Queue provides Approve/Reject; only approval grants access. Service Settings accepts `1 validity_days 30` (0 = lifetime) and `1 delete_after_seconds 86400` (24 hours). Replace 1 with the service ID. Validity is captured at checkout and starts on approval; renewals extend active finite access. Payment screenshots have a 30-minute submission window; submitted evidence remains reviewable afterwards. Profiles show expiry and remaining days/hours when opened. Message deletion is queued from delivery and may be delayed during outages. Existing purchases keep their validity.
 
 Fernet encrypts research at rest with service binding. Messages use protected delivery and durable deletion jobs. Telegram bot chats are not end-to-end encrypted; web/API previews necessarily reveal plaintext to the authenticated owner. Content protection cannot stop external cameras or all copying. Do not enable request-body/debug logging, core dumps or insecure backups.
 
