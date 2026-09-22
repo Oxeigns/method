@@ -1,6 +1,8 @@
 """Central fail-fast settings shared by bot, Flask, migrations and workers."""
 import os
 import fcntl
+import base64
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
@@ -53,6 +55,10 @@ class Config:
         if mode=='upi' and not boolean('ACKNOWLEDGE_UPI_PLATFORM_RESTRICTION'):raise ValueError('Read the UPI platform restriction.')
         folder=Path(os.getenv('DATA_DIR','./data')).resolve();folder.mkdir(parents=True,exist_ok=True)
         raw_keys=os.getenv('MASTER_ENCRYPTION_KEYS','')
+        seed=os.getenv('MASTER_KEY_SEED','')
+        if not raw_keys and seed:
+            if len(seed)<32:raise ValueError('MASTER_KEY_SEED must contain at least 32 random characters.')
+            raw_keys=base64.urlsafe_b64encode(hashlib.sha256(b'method-vault-v1\0'+seed.encode()).digest()).decode()
         if not raw_keys:
             if database:raise ValueError('PostgreSQL requires MASTER_ENCRYPTION_KEYS, shared by web and worker.')
             keyfile=folder/'master.key'
@@ -72,14 +78,14 @@ class Config:
         api_hash=os.getenv('API_HASH','')
         if enabled and (len(api_hash)!=32 or any(c not in '0123456789abcdefABCDEF' for c in api_hash)):
             raise ValueError('Telethon requires a 32-character API_HASH from my.telegram.org.')
-        origin=os.getenv('PUBLIC_ORIGIN','http://localhost:8000').rstrip('/')
+        origin=os.getenv('PUBLIC_ORIGIN', '' if production else 'http://localhost:8000').rstrip('/')
         parts=urlparse(origin)
-        if parts.scheme not in {'http','https'} or not parts.netloc or parts.path or parts.query or parts.fragment:
+        if origin and (parts.scheme not in {'http','https'} or not parts.netloc or parts.path or parts.query or parts.fragment):
             raise ValueError('PUBLIC_ORIGIN must be an origin without a path.')
-        if production and parts.scheme!='https':raise ValueError('Production requires HTTPS PUBLIC_ORIGIN.')
+        if production and origin and parts.scheme!='https':raise ValueError('Production requires HTTPS PUBLIC_ORIGIN.')
         secret=os.getenv('SECRET_KEY','');password=os.getenv('DASHBOARD_PASSWORD_HASH','')
         if component=='web':
             if len(secret)<32:raise ValueError('Web requires SECRET_KEY of at least 32 characters.')
-            if not password.startswith(('scrypt:','pbkdf2:')):raise ValueError('Set DASHBOARD_PASSWORD_HASH with scripts/generate_secrets.py.')
+            if password and not password.startswith(('scrypt:','pbkdf2:')):raise ValueError('Set DASHBOARD_PASSWORD_HASH with scripts/generate_secrets.py.')
         return cls(token,admin,folder,keys,mode,os.getenv('SUPPORT_USERNAME',''),database,production,api_id,api_hash,enabled,
                    origin,secret,password,integer('DB_POOL_MAX',5,2,30),integer('BROADCAST_RATE',8,1,20),boolean('TRUST_PROXY'))

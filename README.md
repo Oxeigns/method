@@ -27,7 +27,7 @@ cp .env.example .env
 
 Set `BOT_TOKEN` and numeric `ADMIN_ID` in `.env`. Leave `DATABASE_URL` empty and `TELETHON_ENABLED=false`, then run `python main.py`. The database and key are generated once in `DATA_DIR`.
 
-For native Telethon features, set `TELETHON_ENABLED=true`, `API_ID` and `API_HASH` from your own Telegram application at https://my.telegram.org. These application credentials are different from the bot token. Owner-only `/dashboard` and `/systemstatus` use Telethon. Paid checkout/receipt ingestion and existing content-management flows remain on aiogram's aiohttp-backed Bot API transport; they have not been discarded during the architecture rebuild.
+For native Telethon features, set `TELETHON_ENABLED=true`, `API_ID` and `API_HASH` from your own Telegram application at https://my.telegram.org. These application credentials are different from the bot token. Owner-only `/systemstatus` uses Telethon; `/dashboard` works through the Bot API even without Telethon. Paid checkout/receipt ingestion and existing content-management flows remain on aiogram's aiohttp-backed Bot API transport; they have not been discarded during the architecture rebuild.
 
 For Termux, read and run `bash scripts/termux.sh`. Android may suspend background processes; it is not a guarantee of 24/7 hosting. The optional web dashboard can be built on a desktop and copied over if a Next.js build is unavailable on Android.
 
@@ -35,7 +35,7 @@ For Termux, read and run `bash scripts/termux.sh`. Android may suspend backgroun
 
 1. Complete local setup and install `requirements.txt`.
 2. Run `python scripts/generate_secrets.py` to generate a web `SECRET_KEY` and a Fernet key. **Existing SQLite deployments: keep your existing data/master.key. Do not replace it with a new key.** The generated Fernet key is for new PostgreSQL deployments; existing local installs may leave `MASTER_ENCRYPTION_KEYS` empty.
-3. Run `python scripts/generate_secrets.py --password-hash`; set its output as `DASHBOARD_PASSWORD_HASH`. Use a new dashboard password, not your Telegram password.
+3. Send `/dashboard` privately to your bot from the configured owner account. Paste the one-use code into the dashboard within five minutes. An optional `DASHBOARD_PASSWORD_HASH` remains supported for existing installations.
 4. Set `PUBLIC_ORIGIN=http://localhost:8000` and your generated `SECRET_KEY`.
 5. Build and start:
 
@@ -52,7 +52,7 @@ Alternatively, `docker compose up --build -d` runs both processes with a shared 
 ## Supabase / PostgreSQL
 
 - Use a direct connection or **session pooler**, not transaction pooling: the bot holds a session advisory lock. Use your Supabase project's provider-issued PostgreSQL URL.
-- Set a stable `MASTER_ENCRYPTION_KEYS` Fernet key shared by every process. PostgreSQL mode will not generate an ephemeral key. Preserve old keys during rotation.
+- Set a stable `MASTER_ENCRYPTION_KEYS` Fernet key or `MASTER_KEY_SEED` shared by every process. PostgreSQL mode will not generate an ephemeral key. Preserve old keys during rotation.
 - Apply `migrations/001_postgres.sql` using the migration owner. It creates a private `method` schema, parameterized-query tables, indexes, RLS and seeds.
 - For least privilege, create the `method_app` login yourself, run `migrations/provision_role.sql`, and use that role in `DATABASE_URL`. Do not expose `method` in the Supabase Data API or grant access to `anon`/`authenticated`.
 - `MIGRATION_DATABASE_URL` may hold an owner connection for the release migration when the runtime role cannot apply DDL. Prefer externally managed migrations if you do not want owner credentials in the app environment.
@@ -66,9 +66,14 @@ Alternatively, `docker compose up --build -d` runs both processes with a shared 
 
 `app.json` provides Node then Python buildpacks, explicit configuration requirements, and separate web/worker formations. `Procfile` runs migrations at release, Flask under Gunicorn, and the async bot as a worker. The Next.js static export is built by `heroku-postbuild`.
 
-Required production settings: `BOT_TOKEN`, `ADMIN_ID`, `API_ID`, `API_HASH`, `DATABASE_URL`, `MASTER_ENCRYPTION_KEYS`, `SECRET_KEY`, `DASHBOARD_PASSWORD_HASH`, `PUBLIC_ORIGIN`, `APP_ENV=production`, `TELETHON_ENABLED=true`. Supabase is not provisioned by this button, and paid dynos/database plans may be needed. Review costs before provisioning.
+Fill `BOT_TOKEN`, `ADMIN_ID`, `API_ID`, `API_HASH` and your private `DATABASE_URL`. Heroku generates `MASTER_KEY_SEED` and `SECRET_KEY` automatically; other settings have defaults. No terminal, manual encryption key or password hash is needed for a new Heroku app. The bot issues a five-minute, one-use dashboard login code to the owner through `/dashboard`. Use Heroku's **Open app** button to open the dashboard.
 
-Set `PUBLIC_ORIGIN` to the exact HTTPS app origin. `TRUST_PROXY=true` is for Heroku's trusted reverse proxy; do not enable it on a directly exposed untrusted server. Keep one Telegram polling worker. Horizontal web scaling is supported; do not independently multiply broadcast workers without a shared rate budget.
+`DATABASE_URL` still must be supplied privately: a Supabase project URL or publishable API key cannot replace a PostgreSQL connection string. Supabase is not provisioned by this button. This repository never includes database passwords. We do not automatically purchase a database add-on. Review Heroku dyno costs before deploying.
+
+Back up `MASTER_KEY_SEED` and keep it unchanged across redeploys/restores. Existing deployments using `MASTER_ENCRYPTION_KEYS` retain priority and must keep their original keys. Do not regenerate a seed for an existing database. The generated seed is converted to a Fernet key using a domain-separated SHA-256 derivation; it is independent of the bot token and session secret.
+
+`PUBLIC_ORIGIN` is optional: when absent, the API compares the browser Origin to its own request origin. HTTPS/proxy handling is enabled on Heroku; arbitrary cross-origin requests remain rejected. An explicit `PUBLIC_ORIGIN` pins a custom domain when desired. `TRUST_PROXY=true` is for Heroku's trusted reverse proxy only. Keep one Telegram polling worker.
+
 
 `.python-version` selects Python 3.12; `runtime.txt` is retained for the requested legacy blueprint. Heroku now recommends `.python-version` and deprecates `runtime.txt`:
 https://devcenter.heroku.com/articles/python-runtimes

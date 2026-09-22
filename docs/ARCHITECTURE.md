@@ -106,3 +106,6 @@ Analytics records route patterns, response codes and timings; database audit ent
 A service is edited via authenticated API → encrypted draft is saved → owner publishes it → bot paginated menu reads the same row → buyer transaction snapshots the price → checked payment grants access and queues delivery atomically → worker checks entitlement and sends protected content → analytics API reports the same approved transaction to React.
 
 The automated trace uses synthetic Telegram sender/payment events. Real Telegram authorization, actual Stars payments/refunds, Supabase connectivity and Heroku dyno lifecycle are separate live acceptance gates. The code does not guarantee legal results, anti-piracy, deletion during outages or zero downtime.
+
+## Mobile deployment and owner login
+Heroku generates independent persistent MASTER_KEY_SEED and SECRET_KEY values. Explicit Fernet keys remain supported and take precedence. `/dashboard` authenticates the private Telegram owner, issues 192 random bits and stores only a SHA-256 digest with a five-minute expiry. A database transaction consumes the code once; issuing a new code invalidates the previous code. Login throttling, session revocation and CSRF apply to both code and optional legacy password login. The database URL remains a private deployment setting, never a public manifest default.

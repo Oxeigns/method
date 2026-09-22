@@ -19,7 +19,7 @@ class Guard(BaseMiddleware):
         is_owner = u.id == self.config.admin_id
         state = data.get('state')
         state_name = await state.get_state() if state else ''
-        owner_route = (isinstance(event,CallbackQuery) and (event.data or '').startswith(('admin:','review:','content:'))) or (isinstance(event,Message) and (event.text or '').split('@')[0].split()[0:1] in [['/adminpanel'],['/backup'],['/restore'],['/import']]) or (state_name or '').startswith('Owner:')
+        owner_route = (isinstance(event,CallbackQuery) and (event.data or '').startswith(('admin:','review:','content:'))) or (isinstance(event,Message) and (event.text or '').split('@')[0].split()[0:1] in [['/dashboard'],['/adminpanel'],['/backup'],['/restore'],['/import']]) or (state_name or '').startswith('Owner:')
         if owner_route and not is_owner:
             if state:
                 await state.clear()

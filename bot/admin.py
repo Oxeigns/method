@@ -201,3 +201,13 @@ async def refund(m: Message,state: FSMContext,store,bot):
     await store.audit(m.from_user.id,'refund',tid)
     await state.clear()
     await m.answer('✅ Refunded. Service access revoked.',reply_markup=ADMIN)
+
+@confirm_router.message(Command('dashboard'))
+async def dashboard(m: Message,state: FSMContext,store,config):
+    # Explicit owner check in addition to the global Guard.
+    if m.chat.type!='private' or m.from_user.id!=config.admin_id:return
+    await state.clear()
+    from backend.owner_login import issue
+    code=await issue(store)
+    location=escape(config.origin) if config.origin else 'Heroku → Open app'
+    await m.answer(f'🔐 Owner dashboard: {location}\nLogin code (5 minutes, one use):\n<code>{code}</code>',protect_content=True)

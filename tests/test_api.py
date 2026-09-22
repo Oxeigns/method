@@ -106,3 +106,19 @@ def test_confirmed_broadcast_and_owner_cannot_be_banned(web):
     assert c.post('/api/broadcasts',json={'text':'Hello','confirmed':False},headers=h).status_code==400
     assert c.post('/api/broadcasts',json={'text':'Hello','confirmed':True},headers=h).status_code==202
     assert c.patch('/api/users/99',json={'is_banned':True},headers=h).status_code==400
+
+def test_owner_code_login_replay_and_automatic_origin(tmp_path):
+    from backend.owner_login import issue
+    from bot.db import Store
+    cfg=Config(token='123:test',admin_id=99,data_dir=tmp_path,keys=(Fernet.generate_key().decode(),),
+               payment_mode='stars',support='',origin='',secret_key='s'*48)
+    b=Bridge(cfg)
+    try:
+        c=create_app(cfg,b).test_client()
+        code=b.run(issue(Store(b.db)))
+        assert c.post('/api/login',json={'password':code},headers={'Origin':'https://evil.invalid'}).status_code==403
+        response=c.post('/api/login',json={'password':code},headers={'Origin':'http://localhost'})
+        assert response.status_code==200
+        assert c.get('/api/analytics').status_code==200
+        assert c.post('/api/login',json={'password':code},headers={'Origin':'http://localhost'}).status_code==401
+    finally:b.close()

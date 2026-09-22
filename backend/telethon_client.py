@@ -21,10 +21,6 @@ async def start(cfg,store,cipher,transport):
                           retry_delay=1,request_retries=0,flood_sleep_threshold=0)
     await retry(lambda:client.start(bot_token=cfg.token),(ConnectionError,OSError,TimeoutError))
     await store.set_setting('telethon_session',cipher.encrypt(0,client.session.save()))
-    @client.on(events.NewMessage(pattern=r'^/dashboard(?:@\w+)?$'))
-    @owner_command(cfg)
-    async def dashboard(event):
-        await client(functions.messages.SendMessageRequest(peer=event.chat_id,message='Owner dashboard: '+cfg.origin,noforwards=True))
     @client.on(events.NewMessage(pattern=r'^/systemstatus(?:@\w+)?$'))
     @owner_command(cfg)
     async def status(event):

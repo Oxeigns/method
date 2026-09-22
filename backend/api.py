@@ -43,7 +43,7 @@ def create_app(cfg=None,bridge=None):
     def before():
         request.started=time.monotonic();request.trace=secrets.token_hex(8)
         if request.path.startswith('/api/') and request.method not in {'GET','HEAD','OPTIONS'}:
-            if request.headers.get('Origin')!=cfg.origin:return jsonify(error='Origin rejected'),403
+            if request.headers.get('Origin')!=(cfg.origin or request.host_url.rstrip('/')):return jsonify(error='Origin rejected'),403
             if not request.is_json:return jsonify(error='JSON required'),415
 
     @app.after_request
@@ -81,7 +81,10 @@ def create_app(cfg=None,bridge=None):
                 ON CONFLICT(bucket) DO UPDATE SET attempts=CASE WHEN login_limits.reset_at<now() THEN 1 ELSE login_limits.attempts+1 END,
                 reset_at=CASE WHEN login_limits.reset_at<now() THEN now()+300 ELSE login_limits.reset_at END RETURNING attempts''',bucket)
         if run(attempt())>8:return jsonify(error='Try again in five minutes'),429
-        if not check_password_hash(cfg.password_hash,data.password):return jsonify(error='Invalid credentials'),401
+        from .owner_login import consume
+        valid=bool(cfg.password_hash) and check_password_hash(cfg.password_hash,data.password)
+        if not valid:valid=run(consume(bridge.db,data.password))
+        if not valid:return jsonify(error='Invalid or expired code/password'),401
         session.clear();session.permanent=True;session['admin_id']=cfg.admin_id
         session['sid']=secrets.token_urlsafe(32);session['csrf']=secrets.token_urlsafe(32)
         run(bridge.db.execute('INSERT INTO web_sessions(session_id,expires_at) VALUES($1,now()+7200)',session['sid']))

@@ -3,7 +3,8 @@ import os,sys,tempfile,threading
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).parents[1]))
 from cryptography.fernet import Fernet
-from werkzeug.security import generate_password_hash
+from backend.owner_login import issue
+from bot.db import Store
 from werkzeug.serving import make_server
 from config import Config
 from backend.api import create_app
@@ -13,8 +14,9 @@ from playwright.sync_api import sync_playwright
 with tempfile.TemporaryDirectory() as directory:
     cfg=Config(token='123:test-placeholder',admin_id=99,data_dir=Path(directory),keys=(Fernet.generate_key().decode(),),
                payment_mode='stars',support='',origin='http://127.0.0.1:5011',secret_key='s'*48,
-               password_hash=generate_password_hash('test-dashboard-password'))
+               password_hash='')
     bridge=Bridge(cfg);server=make_server('127.0.0.1',5011,create_app(cfg,bridge),threaded=True)
+    login_code=bridge.run(issue(Store(bridge.db)))
     threading.Thread(target=server.serve_forever,daemon=True).start()
     try:
         with sync_playwright() as p:
@@ -22,7 +24,7 @@ with tempfile.TemporaryDirectory() as directory:
             page=browser.new_page(viewport={'width':1440,'height':1000})
             errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
             page.goto(cfg.origin)
-            page.get_by_label('Dashboard password').fill('test-dashboard-password')
+            page.get_by_label('Login code or dashboard password').fill(login_code)
             page.get_by_role('button',name='Open workspace').click()
             page.get_by_role('heading',name='Your research, at a glance.').wait_for()
             page.get_by_role('button',name='Services',exact=True).click()
