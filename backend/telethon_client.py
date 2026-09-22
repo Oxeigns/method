@@ -8,6 +8,7 @@ class TelethonSender:
     def __init__(self,client,fallback):self.client,self.fallback=client,fallback
     async def send(self,uid,text):
         try:
+            if not self.client.is_connected():return await self.fallback.send(uid,text)
             try:peer=await self.client.get_input_entity(uid)
             except ValueError:return await self.fallback.send(uid,text)
             return await self.client(functions.messages.SendMessageRequest(peer=peer,message=text,noforwards=True))
@@ -19,8 +20,13 @@ async def start(cfg,store,cipher,transport):
     session=StringSession(cipher.decrypt(0,saved) if saved else '')
     client=TelegramClient(session,cfg.api_id,cfg.api_hash,auto_reconnect=True,connection_retries=5,
                           retry_delay=1,request_retries=0,flood_sleep_threshold=0)
-    await retry(lambda:client.start(bot_token=cfg.token),(ConnectionError,OSError,TimeoutError))
-    await store.set_setting('telethon_session',cipher.encrypt(0,client.session.save()))
+    try:
+        await retry(lambda:client.start(bot_token=cfg.token),(ConnectionError,OSError,TimeoutError))
+        await store.set_setting('telethon_session',cipher.encrypt(0,client.session.save()))
+    except BaseException:
+        # Also clean up if the bounded startup attempt is cancelled.
+        await client.disconnect()
+        raise
     @client.on(events.NewMessage(pattern=r'^/systemstatus(?:@\w+)?$'))
     @owner_command(cfg)
     async def status(event):

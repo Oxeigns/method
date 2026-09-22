@@ -26,7 +26,9 @@ from bot.system_backup import snapshot_loop
 async def main():
     cfg=Config.load()
     cipher=VaultCipher(cfg.keys)
+    logging.info('startup stage=database_connect')
     pool=await open_database(cfg)
+    logging.info('startup stage=database_ready')
     lockfile=None;lockconn=None
     if cfg.database_url:
         lockconn=await pool.pool.acquire()
@@ -71,15 +73,27 @@ async def main():
     try:
         if cfg.telethon_enabled:
             from backend.telethon_client import start
-            telethon,sender=await start(cfg,store,cipher,transport)
+            try:
+                telethon,sender=await asyncio.wait_for(start(cfg,store,cipher,transport),timeout=30)
+            except Exception as exc:
+                logging.warning('startup telethon_unavailable type=%s fallback=bot_api',type(exc).__name__)
         # Preserve pending receipts; never use drop_pending_updates=True.
+        logging.info('startup stage=bot_api_connect')
         await bot.delete_webhook(drop_pending_updates=False)
+        logging.info('startup stage=polling_ready')
         tasks=[asyncio.create_task(fn) for fn in (
             delivery_loop(bot,store,cipher), deletion_loop(bot,store),
             notify_loop(bot,store,cfg),broadcast_engine(store,cipher,sender,cfg.broadcast_rate),
             watch_lock(),receipt_loop(bot,store,cfg),poll(bot,dp,store,cfg,cipher),stop.wait())]
         if not cfg.database_url:tasks.append(asyncio.create_task(snapshot_loop(store,cipher,cfg)))
-        if telethon:tasks.append(asyncio.create_task(telethon.run_until_disconnected()))
+        if telethon:
+            async def watch_telethon():
+                try:await telethon.run_until_disconnected()
+                except Exception as exc:
+                    logging.warning('telethon_disconnected type=%s fallback=bot_api',type(exc).__name__)
+                # Optional MTProto must not terminate payment polling.
+                await stop.wait()
+            tasks.append(asyncio.create_task(watch_telethon()))
         done,_=await asyncio.wait(tasks,return_when=asyncio.FIRST_COMPLETED)
         for task in done:
             task.result()
